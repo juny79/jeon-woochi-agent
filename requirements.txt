@@ -1,0 +1,29 @@
+# --- Core Framework (LangChain) ---
+langchain>=0.3.0
+langchain-core
+langchain-community
+
+# --- LLM & Embeddings (Upstage Solar) ---
+openai>=1.0.0            # Solar API가 OpenAI 호환 모드를 사용하므로 필수
+langchain-upstage        # UpstageEmbeddings 클래스 사용을 위해 필수
+tiktoken                 # 토큰 계산 라이브러리
+
+# --- Vector DB & Retrieval (Advanced RAG) ---
+chromadb>=0.5.0          # Vector Store
+rank_bm25                # Hybrid Retriever(BM25) 구현을 위해 필수 dependency
+langchain-chroma         # (선택) LangChain 최신 버전 호환용
+
+# --- Data Processing (Chunking & Crawling) ---
+langchain-experimental   # SemanticChunker 사용을 위해 필수
+beautifulsoup4           # 웹 크롤링 파싱
+requests                 # 웹 요청
+
+# --- Evaluation & Observability ---
+langsmith                # 정량 평가 및 트레이싱
+langchain-evaluation     # 평가 유틸리티
+
+# --- UI/UX ---
+streamlit>=1.30.0        # 웹 인터페이스
+
+# --- Utilities ---
+python-dotenv            # .env 환경변수 로드
