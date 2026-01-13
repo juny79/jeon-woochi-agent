@@ -11,7 +11,9 @@ class QAEngine:
     def get_answer(self, question: str) -> dict:
         # 1. 하이브리드 검색 실행 (HybridRetriever.retrieve 호출)
         # 결과는 LangChain Document 리스트로 반환됨
+        print(f"   [QA] 검색 시작: {question}")
         retrieved_docs = self.retriever.retrieve(question)
+        print(f"   [QA] {len(retrieved_docs)}개 문서 검색됨")
         
         if not retrieved_docs:
             return {
@@ -34,7 +36,9 @@ class QAEngine:
         ]
 
         # 4. 답변 생성
+        print("   [QA] LLM 호출 중...")
         answer = self.llm_client.generate(prompt)
+        print(f"   [QA] 답변 생성됨")
 
         return {
             "answer": answer,

@@ -1,35 +1,35 @@
 import os
 import argparse
 import sys
+import subprocess
 from src.config import Config
-from src.common.schema import Document
 from src.crawler.meditation_crawler import MeditationNewsCrawler
 from src.processor.chunker_factory import ChunkerFactory
 from src.vector_store.manager import VectorDBManager
 from src.retriever.hybrid_retriever import HybridRetriever
 from src.qa.engine import QAEngine
 from src.eval.runner import EvaluationRunner
-from src.ui.app import launch_ui
+
 from src.agent.orchestrator import JeonWoochiAgent # CLI 테스트용
+from src.agent.persona_prompt import JeonWoochiPersona
+from langchain_core.documents import Document
 
 def load_markdown_knowledge(file_path: str) -> list[Document]:
-    """[팀 B] 로컬 마크다운 지식 파일(data/knowledge.md)을 로드"""
-    if not os.path.exists(file_path):
-        print(f"허허, '{file_path}' 파일이 없구려. 지식서(Markdown)를 먼저 준비하시오.")
+    """마크다운 파일을 읽어 LangChain Document 객체 리스트로 반환하오."""
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            text = f.read()
+        
+        print(f"'{file_path}'에서 전우치의 비급을 읽어들였소.")
+        
+        # [중요 수정 포인트] 
+        # 이전 코드에서 text=text 라고 썼던 부분을 page_content=text 로 수정했습니다.
+        # LangChain은 반드시 'page_content'라는 속성을 요구합니다.
+        return [Document(page_content=text, metadata={"source": file_path})]
+        
+    except FileNotFoundError:
+        print(f"경고: '{file_path}' 파일이 없소. 빈 손으로 돌아갑니다.")
         return []
-    
-    with open(file_path, "r", encoding="utf-8") as f:
-        content = f.read()
-    
-    # 전체 내용을 하나의 Document로 생성 (Chunker가 분할할 것이므로 통으로 넘김)
-    print(f"'{file_path}'에서 전우치의 비급을 읽어들였소.")
-    return [Document(
-        doc_id="doc_md_knowledge_v1",
-        title="전우치의 명상과 영혼에 관한 진서",
-        content=content,
-        source_url="local_knowledge.md",
-        metadata={"category": "knowledge_base", "type": "markdown"}
-    )]
 
 def run_ingest(args):
     """[팀 A & B] 데이터 적재 모드 (Markdown + News -> Chunk -> Hybrid Indexing)"""
@@ -92,36 +92,56 @@ def run_serve(args):
     print(f"--- [SERVE MODE] 전우치 명상소 (전략: {args.strategy}) ---")
     
     if args.interface == "web":
-        # Streamlit 실행 (별도 프로세스)
+        # Streamlit 직접 실행 (subprocess로 streamlit run 명령 실행)
         print("Streamlit 웹 화면을 띄우겠소...")
-        launch_ui(api_key=Config.SOLAR_API_KEY, strategy=args.strategy)
-    else:
-        # CLI 모드 (터미널 대화)
-        db_manager = VectorDBManager(api_key=Config.SOLAR_API_KEY, db_path=Config.DB_PATH)
-        collection_name = f"meditation_{args.strategy}"
+        print("브라우저에서 http://localhost:8501 을 열어주시오.")
+        print("(Streamlit 서버 종료: Ctrl+C)")
         
+        # 환경변수 설정
+        env = os.environ.copy()
+        env["STREAMLIT_SERVER_HEADLESS"] = "false"
+        
+        # streamlit run src/ui/app.py 실행
         try:
-            # 하이브리드 리트리버 생성
-            hybrid_retriever = HybridRetriever(db_manager=db_manager, collection_name=collection_name)
-            qa_engine = QAEngine(retriever=hybrid_retriever, api_key=Config.SOLAR_API_KEY)
-            
-            # Agent (Orchestrator) 연결
-            # (QAEngine을 도구로 사용하는 구조)
-            agent = JeonWoochiAgent(qa_engine=qa_engine) # agent/__init__.py 등 구조에 따라 import 확인 필요
-            
-            print(">>> 전우치 도사가 깨어났소. (종료: exit)")
-            while True:
-                user_input = input("User: ")
-                if user_input.lower() in ["exit", "quit"]:
-                    print("전우치: 인연이 닿으면 또 보세.")
-                    break
-                
-                # 에이전트 답변 생성
-                response = agent.chat(user_input) # Agent 내부에서 QAEngine 호출
-                print(f"전우치: {response}")
-                
+            subprocess.run(
+                ["streamlit", "run", "src/ui/app.py", "--", "--strategy", args.strategy],
+                env=env
+            )
         except Exception as e:
-            print(f"오류: {e}\n먼저 'python main.py ingest'를 실행하여 지식을 채우시오.")
+            print(f"Streamlit 실행 오류: {e}")
+            print("대신 CLI 모드로 전환합니다...")
+            run_serve_cli(args)
+    else:
+        # CLI 모드
+        run_serve_cli(args)
+
+def run_serve_cli(args):
+    """CLI 모드 (터미널 대화)"""
+    db_manager = VectorDBManager(api_key=Config.SOLAR_API_KEY, db_path=Config.DB_PATH)
+    collection_name = f"meditation_{args.strategy}"
+    
+    try:
+        # 하이브리드 리트리버 생성
+        hybrid_retriever = HybridRetriever(db_manager=db_manager, collection_name=collection_name)
+        qa_engine = QAEngine(retriever=hybrid_retriever, api_key=Config.SOLAR_API_KEY)
+        
+        # Agent (Orchestrator) 연결
+        persona = JeonWoochiPersona.SYSTEM_PROMPT
+        agent = JeonWoochiAgent(persona=persona, qa_engine=qa_engine)
+        
+        print(">>> 전우치 도사가 깨어났소. (종료: exit)")
+        while True:
+            user_input = input("User: ")
+            if user_input.lower() in ["exit", "quit"]:
+                print("전우치: 인연이 닿으면 또 보세.")
+                break
+            
+            # 에이전트 답변 생성
+            response = agent.chat(user_input)
+            print(f"전우치: {response}")
+            
+    except Exception as e:
+        print(f"오류: {e}\n먼저 'python main.py ingest'를 실행하여 지식을 채우시오.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="환생한 전우치 명상 RAG 시스템 제어판")

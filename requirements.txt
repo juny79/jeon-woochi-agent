@@ -20,10 +20,11 @@ requests                 # 웹 요청
 
 # --- Evaluation & Observability ---
 langsmith                # 정량 평가 및 트레이싱
-langchain-evaluation     # 평가 유틸리티
 
 # --- UI/UX ---
 streamlit>=1.30.0        # 웹 인터페이스
 
 # --- Utilities ---
 python-dotenv            # .env 환경변수 로드
+
+langgraph                # (선택) 시각화 도구

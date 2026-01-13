@@ -16,7 +16,7 @@ class HybridRetriever:
 
     def __init__(self, db_manager: VectorDBManager, collection_name: str):
         vector_retriever = db_manager.get_vector_retriever(collection_name)
-        bm25_retriever = db_manager.get_bm25_retriever()
+        bm25_retriever = db_manager.get_bm25_retriever(collection_name)
 
         if bm25_retriever is None:
             raise ValueError("BM25 리트리버가 준비되지 않았구려. 먼저 Ingest를 수행하시오.")
@@ -40,8 +40,22 @@ class HybridRetriever:
             return self.ensemble_retriever.get_relevant_documents(query)
 
         # 폴백 병합: BM25 결과 우선으로 두고 중복은 제거하오.
-        bm25_docs = self._bm25.get_relevant_documents(query)
-        vector_docs = self._vector.get_relevant_documents(query)
+        # VectorStore retriever는 invoke() 또는 get_relevant_documents() 사용
+        try:
+            bm25_docs = self._bm25.get_relevant_documents(query)
+        except Exception:
+            bm25_docs = []
+        
+        try:
+            # VectorStoreRetriever는 invoke 메서드 사용
+            if hasattr(self._vector, 'get_relevant_documents'):
+                vector_docs = self._vector.get_relevant_documents(query)
+            elif hasattr(self._vector, 'invoke'):
+                vector_docs = self._vector.invoke(query)
+            else:
+                vector_docs = []
+        except Exception:
+            vector_docs = []
 
         seen_ids = set()
         merged = []

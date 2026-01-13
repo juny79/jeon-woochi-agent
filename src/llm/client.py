@@ -17,11 +17,15 @@ class SolarClient(BaseLLMClient):
 
     def generate(self, messages: list) -> str:
         try:
+            print(f"   [LLM] Solar API 호출 중... (메시지: {len(messages)}개)")
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 temperature=0.7
             )
-            return response.choices[0].message.content
+            result = response.choices[0].message.content
+            print(f"   [LLM] 응답 받음: {len(result)}자")
+            return result
         except Exception as e:
+            print(f"   [LLM] API 오류: {str(e)}")
             return f"허허, 기운(API)이 원활하지 않구려: {str(e)}"
