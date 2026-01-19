@@ -1,5 +1,6 @@
 import streamlit as st
 import time
+import os
 from src.qa.engine import QAEngine
 from src.vector_store.manager import VectorDBManager
 from src.retriever.hybrid_retriever import HybridRetriever
@@ -23,78 +24,185 @@ def get_agent(strategy="recursive"):
     return JeonWoochiAgent(persona=persona, qa_engine=qa_engine)
 
 def show_intro():
-    """인트로 화면 표시 (전체 화면 영상)"""
-    import os
-    from pathlib import Path
-    
-    st.set_page_config(page_title="전우치 명상소", page_icon="🧙‍♂️", layout="wide", initial_sidebar_state="collapsed")
+    """인트로 화면 표시 (전체 화면 영상 + 자동재생 + 음성)"""
     
     # 사이드바 및 헤더 숨기기
     st.markdown("""
     <style>
+        /* 전체 화면 설정 */
+        html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            background: #000 !important;
+        }
+        
         [data-testid="collapsedControl"] {
             display: none !important;
         }
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        .stApp > header {visibility: hidden;}
-        .viewerBadge_container {display: none;}
-        body, .stApp {margin: 0; padding: 0; background-color: #000;}
-        .stVideo {width: 100%; height: 100vh;}
+        #MainMenu {
+            visibility: hidden !important;
+        }
+        footer {
+            visibility: hidden !important;
+        }
+        .stApp > header {
+            visibility: hidden !important;
+        }
+        .viewerBadge_container {
+            display: none !important;
+        }
+        
+        /* Streamlit 컨테이너 전체 화면 */
+        .stAppViewContainer {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            height: 100vh !important;
+        }
+        
+        .stApp {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #000 !important;
+        }
+        
+        /* 비디오 컨테이너 */
+        #intro-video-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            z-index: 9999;
+            background: #000;
+        }
+        
+        #intro-video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        
+        #countdown {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            color: white;
+            font-size: 32px;
+            font-weight: bold;
+            z-index: 10000;
+        }
     </style>
     """, unsafe_allow_html=True)
     
-    # 비디오 파일 읽기
+    # 비디오 파일 확인
     video_path = "videos/intro.mp4"
     if os.path.exists(video_path):
-        # 절대 경로 얻기
-        abs_video_path = os.path.abspath(video_path)
-        
-        # HTML5 비디오 플레이어 (파일 경로 직접 사용)
+        # HTTP 서버에서 스트리밍 (파일 서버 포트 8889)
         st.markdown(f"""
-        <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 999; background: black;">
-            <video id="introVid" 
-                   style="width: 100%; height: 100%; object-fit: cover;" 
-                   autoplay muted
-                   onloadedmetadata="this.muted = false; this.volume = 1.0;">
-                <source src="file:///{abs_video_path.replace(chr(92), '/')}" type="video/mp4">
+        <div id="intro-video-container">
+            <video id="intro-video"
+                   autoplay
+                   playsinline
+                   style="width: 100%; height: 100%; object-fit: cover;">
+                <source src="http://127.0.0.1:8889/videos/intro.mp4" type="video/mp4">
+                <source src="/videos/intro.mp4" type="video/mp4">
             </video>
+            <div id="countdown">8</div>
         </div>
+        
         <script>
-            console.log('Video setup started');
-            var vid = document.getElementById('introVid');
+            console.log('[INTRO] 인트로 스크립트 시작');
             
-            if (vid) {{
-                // 1.5초 후 언뮤트
-                setTimeout(function() {{
-                    vid.muted = false;
-                    vid.volume = 1.0;
-                    console.log('Video unmuted, volume:', vid.volume);
-                }}, 1500);
-                
-                // 메타데이터 로드 시 언뮤트
-                vid.addEventListener('loadedmetadata', function() {{
-                    console.log('Metadata loaded');
-                    vid.muted = false;
-                    vid.volume = 1.0;
+            // 비디오 요소
+            var video = document.getElementById('intro-video');
+            var countdown = document.getElementById('countdown');
+            
+            console.log('[INTRO] 비디오 요소 찾음:', video ? 'YES' : 'NO');
+            
+            if (video) {{
+                // 비디오 로드 에러 핸들러
+                video.addEventListener('error', function(e) {{
+                    console.error('[INTRO] 비디오 로드 에러:', e.message);
+                    console.error('[INTRO] 에러 상세:', video.error);
                 }});
                 
-                // 재생 중일 때도 언뮤트
-                vid.addEventListener('play', function() {{
-                    console.log('Video playing');
-                    vid.muted = false;
-                    vid.volume = 1.0;
+                // 비디오 로드 시작
+                video.addEventListener('loadstart', function() {{
+                    console.log('[INTRO] 비디오 로드 시작');
                 }});
+                
+                // canplay 이벤트
+                video.addEventListener('canplay', function() {{
+                    console.log('[INTRO] 비디오 재생 가능');
+                }});
+                
+                // 자동 재생 시도
+                console.log('[INTRO] 자동 재생 시도...');
+                var playPromise = video.play();
+                if (playPromise !== undefined) {{
+                    playPromise.then(function() {{
+                        console.log('[INTRO] 비디오 재생 시작');
+                        video.muted = false;
+                        video.volume = 1.0;
+                        console.log('[INTRO] 음성 활성화: muted=false, volume=1.0');
+                    }}).catch(function(error) {{
+                        console.error('[INTRO] 자동 재생 실패:', error.name, error.message);
+                    }});
+                }}
+                
+                // 메타데이터 로드 시
+                video.addEventListener('loadedmetadata', function() {{
+                    console.log('[INTRO] 메타데이터 로드됨, 재생 길이: ' + video.duration + '초');
+                    video.muted = false;
+                    video.volume = 1.0;
+                }});
+                
+                // 재생 이벤트
+                video.addEventListener('play', function() {{
+                    console.log('[INTRO] 재생 중');
+                }});
+                
+                // 일시정지 이벤트
+                video.addEventListener('pause', function() {{
+                    console.log('[INTRO] 일시정지됨');
+                }});
+                
+                // 음량 명시적 설정
+                video.volume = 1.0;
+                video.muted = false;
+                console.log('[INTRO] 초기 음량 설정: volume=1.0, muted=false');
+            }} else {{
+                console.error('[INTRO] 비디오 요소를 찾을 수 없습니다');
             }}
+            
+            // 카운트다운 (8초)
+            console.log('[INTRO] 카운트다운 시작');
+            var count = 8;
+            var interval = setInterval(function() {{
+                count--;
+                if (countdown) {{
+                    countdown.textContent = count;
+                }}
+                if (count <= 0) {{
+                    clearInterval(interval);
+                    console.log('[INTRO] 카운트다운 완료');
+                }}
+            }}, 1000);
         </script>
         """, unsafe_allow_html=True)
+        
     else:
         st.error(f"영상 파일을 찾을 수 없습니다: {video_path}")
         return
     
     # 8초 카운트다운
-    for i in range(8):
-        time.sleep(1)
+    time.sleep(8)
     
     # 세션 상태 업데이트
     st.session_state.show_intro = False

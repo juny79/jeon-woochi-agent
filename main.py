@@ -2,6 +2,7 @@ import os
 import argparse
 import sys
 import subprocess
+from threading import Thread
 from src.config import Config
 from src.crawler.meditation_crawler import MeditationNewsCrawler
 from src.processor.chunker_factory import ChunkerFactory
@@ -13,6 +14,24 @@ from src.eval.runner import EvaluationRunner
 from src.agent.orchestrator import JeonWoochiAgent # CLI 테스트용
 from src.agent.persona_prompt import JeonWoochiPersona
 from langchain_core.documents import Document
+
+def start_video_server():
+    """비디오 서버를 백그라운드에서 시작"""
+    try:
+        import time
+        # 별도 프로세스로 video_server.py 실행
+        thread = Thread(
+            target=lambda: subprocess.run(
+                [sys.executable, "video_server.py"],
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+            ),
+            daemon=True
+        )
+        thread.start()
+        time.sleep(1)  # 서버 시작 대기
+        print("[VIDEO SERVER] 비디오 서버 시작 (포트 8889)")
+    except Exception as e:
+        print(f"[ERROR] 비디오 서버 시작 실패: {e}")
 
 def load_markdown_knowledge(file_path: str) -> list[Document]:
     """마크다운 파일을 읽어 LangChain Document 객체 리스트로 반환하오."""
@@ -92,25 +111,20 @@ def run_serve(args):
     print(f"--- [SERVE MODE] 전우치 명상소 (전략: {args.strategy}) ---")
     
     if args.interface == "web":
-        # Streamlit 직접 실행 (subprocess로 streamlit run 명령 실행)
+        # 비디오 서버 시작 (백그라운드)
+        start_video_server()
+        
+        # Streamlit 웹 화면을 띄우겠소
         print("Streamlit 웹 화면을 띄우겠소...")
         print("브라우저에서 http://localhost:8501 을 열어주시오.")
         print("(Streamlit 서버 종료: Ctrl+C)")
+        print()
         
-        # 환경변수 설정
-        env = os.environ.copy()
-        env["STREAMLIT_SERVER_HEADLESS"] = "false"
-        
-        # streamlit run src/ui/app.py 실행
-        try:
-            subprocess.run(
-                ["streamlit", "run", "src/ui/app.py", "--", "--strategy", args.strategy],
-                env=env
-            )
-        except Exception as e:
-            print(f"Streamlit 실행 오류: {e}")
-            print("대신 CLI 모드로 전환합니다...")
-            run_serve_cli(args)
+        # subprocess로 실행
+        import time
+        time.sleep(1)
+        subprocess.run([sys.executable, "-m", "streamlit", "run", "src/ui/app.py"])
+        return
     else:
         # CLI 모드
         run_serve_cli(args)
