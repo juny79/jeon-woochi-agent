@@ -1,0 +1,9 @@
+--- [SERVE MODE] 전우치 명상소 (전략: recursive) ---
+[VIDEO SERVER] 비디오 서버 시작 (포트 8889)
+Streamlit 웹 화면을 띄우겠소...
+브라우저에서 http://localhost:8501 을 열어주시오.
+(Streamlit 서버 종료: Ctrl+C)
+Streamlit 실행 오류: No module named 'streamlit.cli'
+대신 CLI 모드로 전환합니다...
+>>> 전우치 도사가 깨어났소. (종료: exit)
+User: 

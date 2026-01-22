@@ -1,0 +1,30 @@
+# --- Existing Dependencies ---
+langchain>=0.3.0
+langchain-core
+langchain-community
+openai>=1.0.0
+langchain-upstage
+tiktoken
+chromadb>=0.5.0
+rank_bm25
+langchain-chroma
+langchain-experimental
+beautifulsoup4
+requests
+
+# --- Backend Server ---
+fastapi
+uvicorn
+python-multipart
+cors
+
+# --- Evaluation & Observability ---
+langsmith                # 정량 평가 및 트레이싱
+
+# --- UI/UX ---
+streamlit>=1.30.0        # 웹 인터페이스
+
+# --- Utilities ---
+python-dotenv            # .env 환경변수 로드
+
+langgraph                # (선택) 시각화 도구

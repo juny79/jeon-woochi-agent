@@ -1,0 +1,9 @@
+[client]
+showErrorDetails = true
+
+[server]
+headless = true
+runOnSave = true
+# 정적 파일 제공 설정
+[logger]
+level = "info"
