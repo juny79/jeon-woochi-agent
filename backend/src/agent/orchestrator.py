@@ -1,4 +1,4 @@
-from src.qa.engine import QAEngine
+﻿from src.qa.engine import QAEngine
 
 
 class ConversationBufferMemory:
@@ -46,3 +46,18 @@ class JeonWoochiAgent:
             return answer
         except Exception as e:
             return f"오류: {str(e)}"
+
+    def chat_stream(self, user_input: str):
+        """사용자 입력을 받아 스트리밍으로 답변 생성"""
+        try:
+            # QA Engine의 스트리밍 답변 사용
+            full_response = ""
+            for chunk in self.qa_engine.get_answer_stream(user_input):
+                full_response += chunk
+                yield chunk
+            
+            # 최종 답변을 메모리에 저장
+            self.memory.save_context({"input": user_input}, {"output": full_response})
+            
+        except Exception as e:
+            yield f"도술 실행 중 오류가 발생했소: {str(e)}"

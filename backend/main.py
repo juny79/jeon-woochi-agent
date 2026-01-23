@@ -50,6 +50,39 @@ def load_markdown_knowledge(file_path: str) -> list[Document]:
         print(f"경고: '{file_path}' 파일이 없소. 빈 손으로 돌아갑니다.")
         return []
 
+def distill_knowledge(docs: list[Document]) -> list[Document]:
+    """수집된 날것의 정보를 전우치의 말투와 비급서 형태로 변환하오."""
+    from src.llm.client import SolarClient
+    client = SolarClient(api_key=Config.SOLAR_API_KEY)
+    
+    distilled_docs = []
+    print(f"--- [DISTILLATION] {len(docs)}개의 지식을 전우치 비급으로 변환 중 ---")
+    
+    for i, doc in enumerate(docs):
+        # 너무 긴 문서는 요약 및 변환
+        prompt = [
+            {"role": "system", "content": (
+                "당신은 조선의 도사 '전우치'이오. 아래 제공된 [Raw Data]를 읽고, "
+                "현대인들이 읽기 쉬운 '입문자용 명상/건강 비급' 형태로 재구성하시오. "
+                "말투는 반드시 '~하오', '~구려', '~소'와 같은 고풍스러운 도사 말투를 유지하고, "
+                "내용은 핵심 위주로 정리하여 '전우치의 비급'처럼 만드시오."
+            )},
+            {"role": "user", "content": f"[Raw Data]\n{doc.page_content}"}
+        ]
+        
+        try:
+            distilled_content = client.generate(prompt)
+            # 메타데이터 유지 및 변환 표시
+            new_metadata = doc.metadata.copy()
+            new_metadata["distilled"] = True
+            distilled_docs.append(Document(page_content=distilled_content, metadata=new_metadata))
+            print(f"   [{i+1}/{len(docs)}] 변환 완료: {new_metadata.get('title', 'Unknown')}")
+        except Exception as e:
+            print(f"   [{i+1}/{len(docs)}] 변환 실패, 원본 유지: {e}")
+            distilled_docs.append(doc)
+            
+    return distilled_docs
+
 def run_ingest(args):
     """[팀 A & B] 데이터 적재 모드 (Markdown + News -> Chunk -> Hybrid Indexing)"""
     print(f"--- [INGEST MODE] 전략: {args.strategy} / 하이브리드 적재 시작 ---")
@@ -60,24 +93,26 @@ def run_ingest(args):
     md_docs = load_markdown_knowledge("data/knowledge.md")
     all_docs.extend(md_docs)
 
-    # 2. (선택사항) 뉴스 크롤러 실행
-    # 실제 운영 시에는 크롤링도 함께 수행하여 지식을 확장할 수 있소.
-    # crawler = MeditationNewsCrawler()
-    # news_docs = crawler.fetch_data(query="명상과 뇌과학")
-    # all_docs.extend(news_docs)
+    # 2. 뉴스 및 전문 사이트 크롤러 실행
+    crawler = MeditationNewsCrawler()
+    # 기초 명상 및 STB 고위 수행법 수집
+    news_docs = crawler.fetch_data(query="기초 명상 및 건강관리")
+    
+    # 3. [전우치 도술] 수집된 기초 지식을 전우치 문체로 변환 (Distillation)
+    if news_docs:
+        distilled_news = distill_knowledge(news_docs)
+        all_docs.extend(distilled_news)
     
     if not all_docs:
         print("적재할 지식이 하나도 없구려. 경로를 확인하시오.")
         return
 
-    # 3. 청킹 전략 적용 (Factory)
+    # 4. 청킹 전략 적용 (Factory)
     chunker = ChunkerFactory.get_chunker(args.strategy)
-    # LangChain Document 객체 리스트로 변환 및 분할
     chunks = chunker.split_documents(all_docs)
     print(f"총 {len(chunks)}개의 지식 조각으로 나누었소.")
     
-    # 4. 저장 (Vector DB + BM25 인덱스 동시 생성)
-    # VectorDBManager.add_documents 내부에서 pickle로 BM25도 저장하도록 수정되었음
+    # 5. 저장 (Vector DB + BM25 인덱스 동시 생성)
     db_manager = VectorDBManager(api_key=Config.SOLAR_API_KEY, db_path=Config.DB_PATH)
     collection_name = f"meditation_{args.strategy}"
     

@@ -12,14 +12,8 @@ from rank_bm25 import BM25Okapi
 from langchain_core.retrievers import BaseRetriever
 from pydantic import Field
 
-# [임시] 임베딩을 위한 더미 클래스
-class MockEmbeddings(Embeddings):
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        return [[0.1] * 1536 for _ in texts]
-    
-    def embed_query(self, text: str) -> List[float]:
-        return [0.1] * 1536
-
+from langchain_upstage import UpstageEmbeddings
+from src.config import Config
 
 class BM25Retriever(BaseRetriever):
     """BM25 기반 키워드 검색 리트리버"""
@@ -68,11 +62,15 @@ class BM25Retriever(BaseRetriever):
 
 class VectorDBManager:
     def __init__(self, api_key: str = None, db_path: str = "./chroma_db"):
-        self.api_key = api_key
+        self.api_key = api_key or Config.SOLAR_API_KEY
         self.db_path = db_path
         self.client = chromadb.PersistentClient(path=db_path)
         self.collection = None
-        self.embedding_func = MockEmbeddings()
+        # [수정] MockEmbeddings 대신 실제 UpstageEmbeddings를 사용하오
+        self.embedding_func = UpstageEmbeddings(
+            api_key=self.api_key,
+            model="embedding-query"
+        )
         self.stored_docs = {}  # collection_name -> List[Document] 매핑
 
     def get_collection(self, collection_name: str):
