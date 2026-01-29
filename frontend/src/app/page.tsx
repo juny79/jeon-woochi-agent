@@ -122,41 +122,42 @@ export default function Home() {
       setIsLoading(false); // 스트리밍이 시작되면 로딩 바는 끕니다.
 
       let accumulatedContent = "";
+      let sessionIdExtracted = false;
       
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         
-        const chunk = decoder.decode(value, { stream: true });
-        
-        // 세션 ID 체크 (첫 줄에 있을 수 있음)
-        if (chunk.startsWith("SESSION_ID:")) {
-          const firstNewline = chunk.indexOf("\n");
-          if (firstNewline !== -1) {
-            const sid = chunk.substring(11, firstNewline);
-            const contentPart = chunk.substring(firstNewline + 1);
-            
-            if (!currentSessionId) {
-              setCurrentSessionId(parseInt(sid));
-              fetchSessions();
+        try {
+          const chunk = decoder.decode(value, { stream: true });
+          
+          if (!sessionIdExtracted && chunk.includes("SESSION_ID:")) {
+            // 세션 ID 추출
+            const lines = chunk.split('\n');
+            for (const line of lines) {
+              if (line.startsWith("SESSION_ID:")) {
+                const sid = line.substring(11);
+                if (sid && !currentSessionId) {
+                  setCurrentSessionId(parseInt(sid));
+                  fetchSessions();
+                  sessionIdExtracted = true;
+                }
+              } else if (line.trim()) {
+                accumulatedContent += line;
+              }
             }
-            
-            if (contentPart) {
-              accumulatedContent += contentPart;
-              setMessages(prev => {
-                const updated = [...prev];
-                updated[updated.length - 1].content = accumulatedContent;
-                return updated;
-              });
-            }
+          } else if (chunk.trim()) {
+            accumulatedContent += chunk;
           }
-        } else {
-          accumulatedContent += chunk;
+          
+          // 메시지 업데이트
           setMessages(prev => {
             const updated = [...prev];
             updated[updated.length - 1].content = accumulatedContent;
             return updated;
           });
+        } catch (decodeError) {
+          console.error("Decode error:", decodeError);
         }
       }
     } catch (error) {
@@ -296,13 +297,61 @@ export default function Home() {
                               ol: ({node, ...props}) => <ol className="list-decimal ml-6 mb-4 space-y-2" {...props} />,
                               li: ({node, ...props}) => <li className="pl-1" {...props} />,
                               strong: ({node, ...props}) => <strong className="font-bold text-[#8ab4f8] bg-[#8ab4f8]/10 px-1 rounded" {...props} />,
-                              blockquote: ({node, ...props}) => (
-                                <blockquote className="border-l-4 border-[#4285f4] pl-4 py-2 my-4 bg-[#1e1f20] rounded-r-lg italic text-[#9aa0a6]" {...props} />
-                              ),
-                              p: ({node, ...props}) => <p className="mb-4 last:mb-0" {...props} />,
-                              code: ({node, ...props}) => (
-                                <code className="bg-[#2b2c2f] px-1.5 py-0.5 rounded text-sm font-mono text-[#d96570]" {...props} />
-                              ),
+                            h1: ({node, ...props}) => (
+                              <h1 className="text-2xl font-bold mt-6 mb-4 text-white border-b border-[#333] pb-2" {...props} />
+                            ),
+                            h2: ({node, ...props}) => (
+                              <h2 className="text-xl font-bold mt-5 mb-3 text-[#e3e3e3]" {...props} />
+                            ),
+                            h3: ({node, ...props}) => (
+                              <h3 className="text-lg font-semibold mt-4 mb-2 text-[#b3b3b3]" {...props} />
+                            ),
+                            h4: ({node, ...props}) => (
+                              <h4 className="text-base font-semibold mt-3 mb-2 text-[#9aa0a6]" {...props} />
+                            ),
+                            ul: ({node, ...props}) => (
+                              <ul className="list-disc list-inside space-y-1 ml-2 my-3 text-[#d0d0d0]" {...props} />
+                            ),
+                            ol: ({node, ...props}) => (
+                              <ol className="list-decimal list-inside space-y-1 ml-2 my-3 text-[#d0d0d0]" {...props} />
+                            ),
+                            li: ({node, ...props}) => (
+                              <li className="ml-2 my-1" {...props} />
+                            ),
+                            strong: ({node, ...props}) => (
+                              <strong className="font-bold text-[#4285f4]" {...props} />
+                            ),
+                            em: ({node, ...props}) => (
+                              <em className="italic text-[#b3b3b3]" {...props} />
+                            ),
+                            hr: ({node, ...props}) => (
+                              <hr className="border-t border-[#333] my-4" {...props} />
+                            ),
+                            blockquote: ({node, ...props}) => (
+                              <blockquote className="border-l-4 border-[#4285f4] pl-4 py-2 my-4 bg-[#1e1f20] rounded-r-lg italic text-[#9aa0a6]" {...props} />
+                            ),
+                            p: ({node, ...props}) => <p className="mb-3 leading-relaxed text-[#e3e3e3] last:mb-0" {...props} />,
+                            code: ({node, ...props}) => (
+                              <code className="bg-[#2b2c2f] px-1.5 py-0.5 rounded text-sm font-mono text-[#d96570]" {...props} />
+                            ),
+                            pre: ({node, ...props}) => (
+                              <pre className="bg-[#1e1f20] p-4 rounded-lg overflow-x-auto my-3 border border-[#333]" {...props} />
+                            ),
+                            table: ({node, ...props}) => (
+                              <table className="border-collapse w-full my-3 border border-[#333]" {...props} />
+                            ),
+                            thead: ({node, ...props}) => (
+                              <thead className="bg-[#2b2c2f]" {...props} />
+                            ),
+                            th: ({node, ...props}) => (
+                              <th className="border border-[#333] px-3 py-2 text-left font-semibold text-[#4285f4]" {...props} />
+                            ),
+                            td: ({node, ...props}) => (
+                              <td className="border border-[#333] px-3 py-2" {...props} />
+                            ),
+                            a: ({node, ...props}) => (
+                              <a className="text-[#4285f4] hover:underline" {...props} />
+                            ),
                             }}
                           >
                             {msg.content}

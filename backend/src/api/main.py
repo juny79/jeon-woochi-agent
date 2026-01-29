@@ -111,7 +111,10 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
             db.commit()
             db.refresh(session)
 
-        user_msg = ChatMessage(session_id=session.id, role="user", content=request.message)
+        # session.id를 미리 저장 (db session이 종료되기 전에)
+        session_id = session.id
+
+        user_msg = ChatMessage(session_id=session_id, role="user", content=request.message)
         db.add(user_msg)
         db.commit()
 
@@ -119,21 +122,28 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
 
         async def event_generator():
             full_response = ""
-            yield f"SESSION_ID:{session.id}\n"
+            yield f"SESSION_ID:{session_id}\n"
             
-            for chunk in agent.chat_stream(request.message):
-                full_response += chunk
-                yield chunk
+            try:
+                for chunk in agent.chat_stream(request.message):
+                    if chunk:  # 빈 청크 필터링
+                        full_response += chunk
+                        # 각 청크를 UTF-8로 인코딩하여 전송
+                        yield chunk.encode('utf-8').decode('utf-8')
+            except Exception as e:
+                print(f"Stream error: {e}")
+                yield f"\n[오류] 스트리밍 중 문제 발생: {str(e)}"
             
             try:
                 with SessionLocal() as save_db:
-                    assistant_msg = ChatMessage(session_id=session.id, role="assistant", content=full_response)
+                    assistant_msg = ChatMessage(session_id=session_id, role="assistant", content=full_response)
                     save_db.add(assistant_msg)
                     save_db.commit()
             except Exception as e:
                 print(f"Error saving message: {e}")
 
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+        return StreamingResponse(event_generator(), media_type="text/plain; charset=utf-8")
 
     except Exception as e:
+        print(f"Chat stream error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
