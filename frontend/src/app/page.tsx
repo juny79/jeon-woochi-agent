@@ -105,13 +105,13 @@ const mdComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
 
 // ─── 메인 컴포넌트 ──────────────────────────────────────────────────────────
 export default function Home() {
-  const [mounted, setMounted] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
   const [input, setInput] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [isClient, setIsClient] = useState(false);
   // 세션 관리 상태
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
   const [renamingId, setRenamingId] = useState<number | null>(null);
@@ -120,15 +120,13 @@ export default function Home() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    setMounted(true);
+    setIsClient(true);
     fetchSessions();
   }, []);
 
   useEffect(() => {
-    if (mounted) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages, mounted]);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // textarea 자동 높이
   useEffect(() => {
@@ -159,7 +157,7 @@ export default function Home() {
       const data: Message[] = await res.json();
       setMessages(data);
       setCurrentSessionId(id);
-      if (window.innerWidth < 768) setIsSidebarOpen(false);
+      if (isClient && window.innerWidth < 768) setIsSidebarOpen(false);
     } catch {
       alert("세션을 불러오지 못했습니다.");
     } finally {
@@ -171,7 +169,7 @@ export default function Home() {
     setMessages([]);
     setCurrentSessionId(null);
     setMenuOpenId(null);
-    if (window.innerWidth < 768) setIsSidebarOpen(false);
+    if (isClient && window.innerWidth < 768) setIsSidebarOpen(false);
   };
 
   const handleRenameStart = (s: Session) => {
@@ -296,12 +294,11 @@ export default function Home() {
     textareaRef.current?.focus();
   };
 
-  if (!mounted) return <div className="h-screen bg-[#131314]" />;
+
 
   return (
     <div
       className="flex h-screen bg-[#131314] text-[#e3e3e3] overflow-hidden font-sans"
-      suppressHydrationWarning
     >
       {/* ── 사이드바 ───────────────────────────────────────────────── */}
       <motion.aside
