@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
-import json
+import os
 from src.agent.orchestrator import JeonWoochiAgent
 from src.agent.persona_prompt import JeonWoochiPersona
 from src.vector_store.manager import VectorDBManager
@@ -20,10 +20,16 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="JeonWoochi API", description="전우치 명상 에이전트 백엔드")
 
-# CORS 설정
+# CORS 설정 — 환경변수 ALLOWED_ORIGINS 로 제어 (기본: localhost 개발 환경)
+_raw_origins = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,http://localhost:3001,http://localhost:4000,http://localhost:4001"
+)
+_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,6 +60,9 @@ class SessionInfo(BaseModel):
     id: int
     title: str
     created_at: str
+
+class SessionRenameRequest(BaseModel):
+    title: str
 
 @app.get("/")
 async def root():
@@ -147,3 +156,26 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
     except Exception as e:
         print(f"Chat stream error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/sessions/{session_id}")
+async def rename_session(session_id: int, body: SessionRenameRequest, db: Session = Depends(get_db)):
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="Title must not be empty")
+    session.title = title
+    db.commit()
+    return {"id": session.id, "title": session.title}
+
+
+@app.delete("/sessions/{session_id}", status_code=204)
+async def delete_session(session_id: int, db: Session = Depends(get_db)):
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    db.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete()
+    db.delete(session)
+    db.commit()

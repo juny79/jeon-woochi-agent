@@ -5,7 +5,7 @@ load_dotenv()
 
 class Config:
     SOLAR_API_KEY = os.getenv("SOLAR_API_KEY")
-    DB_PATH = "./data/chroma_db"
+    DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "chroma_db")
     COLLECTION_NAME = "meditation_knowledge"
     # 팀 B, C, D가 공통으로 참조할 설정들
 

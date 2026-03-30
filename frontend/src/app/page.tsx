@@ -1,24 +1,32 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { 
-  Plus, 
-  MessageSquare, 
-  Settings, 
-  History, 
-  HelpCircle, 
-  Menu, 
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import {
+  Plus,
+  MessageSquare,
+  Settings,
+  History,
+  HelpCircle,
+  Menu,
   Send,
-  Sparkles,
-  User,
-  MoreVertical,
-  Search
+  Search,
+  Trash2,
+  Pencil,
+  Check,
+  X,
+  MoreHorizontal,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import Image from 'next/image';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import Image from "next/image";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
+// ─── 환경변수 기반 API 경로 ─────────────────────────────────────────────────
+// next.config.ts 에서 /api/backend/* → 백엔드로 프록시됨.
+// 브라우저에 백엔드 주소가 노출되지 않으며, 배포 시 .env.local 만 수정하면 됨.
+const API = "/api/backend";
+
+// ─── 타입 ──────────────────────────────────────────────────────────────────
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -30,6 +38,72 @@ interface Session {
   created_at: string;
 }
 
+// ─── ReactMarkdown 공통 컴포넌트 (중복 제거) ───────────────────────────────
+const mdComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
+  h1: ({ ...props }) => (
+    <h1 className="text-2xl font-bold mt-6 mb-4 text-white border-b border-[#333] pb-2" {...props} />
+  ),
+  h2: ({ ...props }) => (
+    <h2 className="text-xl font-bold mt-5 mb-3 text-[#e3e3e3]" {...props} />
+  ),
+  h3: ({ ...props }) => (
+    <h3 className="text-lg font-semibold mt-4 mb-2 text-[#b3b3b3]" {...props} />
+  ),
+  h4: ({ ...props }) => (
+    <h4 className="text-base font-semibold mt-3 mb-2 text-[#9aa0a6]" {...props} />
+  ),
+  p: ({ ...props }) => (
+    <p className="mb-3 leading-relaxed text-[#e3e3e3] last:mb-0" {...props} />
+  ),
+  ul: ({ ...props }) => (
+    <ul className="list-disc list-inside space-y-1 ml-2 my-3 text-[#d0d0d0]" {...props} />
+  ),
+  ol: ({ ...props }) => (
+    <ol className="list-decimal list-inside space-y-1 ml-2 my-3 text-[#d0d0d0]" {...props} />
+  ),
+  li: ({ ...props }) => <li className="ml-2 my-1" {...props} />,
+  strong: ({ ...props }) => (
+    <strong className="font-bold text-[#4285f4]" {...props} />
+  ),
+  em: ({ ...props }) => <em className="italic text-[#b3b3b3]" {...props} />,
+  hr: ({ ...props }) => <hr className="border-t border-[#333] my-4" {...props} />,
+  blockquote: ({ ...props }) => (
+    <blockquote
+      className="border-l-4 border-[#4285f4] pl-4 py-2 my-4 bg-[#1e1f20] rounded-r-lg italic text-[#9aa0a6]"
+      {...props}
+    />
+  ),
+  code: ({ ...props }) => (
+    <code
+      className="bg-[#2b2c2f] px-1.5 py-0.5 rounded text-sm font-mono text-[#d96570]"
+      {...props}
+    />
+  ),
+  pre: ({ ...props }) => (
+    <pre
+      className="bg-[#1e1f20] p-4 rounded-lg overflow-x-auto my-3 border border-[#333]"
+      {...props}
+    />
+  ),
+  table: ({ ...props }) => (
+    <table className="border-collapse w-full my-3 border border-[#333]" {...props} />
+  ),
+  thead: ({ ...props }) => <thead className="bg-[#2b2c2f]" {...props} />,
+  th: ({ ...props }) => (
+    <th
+      className="border border-[#333] px-3 py-2 text-left font-semibold text-[#4285f4]"
+      {...props}
+    />
+  ),
+  td: ({ ...props }) => (
+    <td className="border border-[#333] px-3 py-2" {...props} />
+  ),
+  a: ({ ...props }) => (
+    <a className="text-[#4285f4] hover:underline" target="_blank" rel="noopener noreferrer" {...props} />
+  ),
+};
+
+// ─── 메인 컴포넌트 ──────────────────────────────────────────────────────────
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -38,33 +112,56 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  // 세션 관리 상태
+  const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setMounted(true);
     fetchSessions();
   }, []);
 
-  const fetchSessions = async () => {
-    try {
-      const response = await fetch("http://localhost:8000/sessions");
-      const data = await response.json();
-      setSessions(data);
-    } catch (error) {
-      console.error("Error fetching sessions:", error);
+  useEffect(() => {
+    if (mounted) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  };
+  }, [messages, mounted]);
+
+  // textarea 자동 높이
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (ta) {
+      ta.style.height = "auto";
+      ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+    }
+  }, [input]);
+
+  const fetchSessions = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/sessions`);
+      if (!res.ok) return;
+      const data: Session[] = await res.json();
+      setSessions(data);
+    } catch {
+      // 백엔드 미실행 시 무시
+    }
+  }, []);
 
   const loadSession = async (id: number) => {
     setIsLoading(true);
+    setMenuOpenId(null);
     try {
-      const response = await fetch(`http://localhost:8000/sessions/${id}/messages`);
-      const data = await response.json();
+      const res = await fetch(`${API}/sessions/${id}/messages`);
+      if (!res.ok) throw new Error("load failed");
+      const data: Message[] = await res.json();
       setMessages(data);
       setCurrentSessionId(id);
       if (window.innerWidth < 768) setIsSidebarOpen(false);
-    } catch (error) {
-      console.error("Error loading session:", error);
+    } catch {
+      alert("세션을 불러오지 못했습니다.");
     } finally {
       setIsLoading(false);
     }
@@ -73,286 +170,406 @@ export default function Home() {
   const handleNewChat = () => {
     setMessages([]);
     setCurrentSessionId(null);
+    setMenuOpenId(null);
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const handleRenameStart = (s: Session) => {
+    setRenamingId(s.id);
+    setRenameValue(s.title);
+    setMenuOpenId(null);
   };
 
-  useEffect(() => {
-    if (mounted) {
-      scrollToBottom();
+  const handleRenameSubmit = async (id: number) => {
+    const title = renameValue.trim();
+    if (!title) return;
+    try {
+      const res = await fetch(`${API}/sessions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      if (!res.ok) throw new Error("rename failed");
+      setSessions((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, title } : s))
+      );
+    } catch {
+      alert("이름 변경에 실패했습니다.");
+    } finally {
+      setRenamingId(null);
     }
-  }, [messages, mounted]);
+  };
 
-  if (!mounted) {
-    return <div className="h-screen bg-[#131314]" />;
-  }
+  const handleDelete = async (id: number) => {
+    if (!confirm("이 대화를 삭제하시겠습니까?")) return;
+    try {
+      const res = await fetch(`${API}/sessions/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("delete failed");
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+      if (currentSessionId === id) {
+        setMessages([]);
+        setCurrentSessionId(null);
+      }
+    } catch {
+      alert("삭제에 실패했습니다.");
+    } finally {
+      setMenuOpenId(null);
+    }
+  };
 
   const handleSend = async () => {
-    if (!input.trim()) return;
+    const text = input.trim();
+    if (!text || isLoading) return;
 
-    const userMessage: Message = { role: "user", content: input };
-    setMessages(prev => [...prev, userMessage]);
-    
-    const currentInput = input;
+    setMessages((prev) => [...prev, { role: "user", content: text }]);
     setInput("");
     setIsLoading(true);
 
     try {
-      const response = await fetch("http://localhost:8000/chat/stream", {
+      const res = await fetch(`${API}/chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          message: currentInput, 
+        body: JSON.stringify({
+          message: text,
           strategy: "recursive",
-          session_id: currentSessionId 
+          session_id: currentSessionId,
         }),
       });
 
-      if (!response.ok) throw new Error("Network response was not ok");
-      if (!response.body) throw new Error("No body in response");
+      if (!res.ok || !res.body) throw new Error("stream failed");
 
-      const reader = response.body.getReader();
+      const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      
-      // 어시스턴트 메시지 자리 미리 확보
-      setMessages(prev => [...prev, { role: "assistant", content: "" }]);
-      setIsLoading(false); // 스트리밍이 시작되면 로딩 바는 끕니다.
 
-      let accumulatedContent = "";
-      let sessionIdExtracted = false;
-      
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+      setIsLoading(false);
+
+      let accumulated = "";
+      let sidExtracted = false;
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        
-        try {
-          const chunk = decoder.decode(value, { stream: true });
-          
-          if (!sessionIdExtracted && chunk.includes("SESSION_ID:")) {
-            // 세션 ID 추출
-            const lines = chunk.split('\n');
-            for (const line of lines) {
-              if (line.startsWith("SESSION_ID:")) {
-                const sid = line.substring(11);
-                if (sid && !currentSessionId) {
-                  setCurrentSessionId(parseInt(sid));
-                  fetchSessions();
-                  sessionIdExtracted = true;
-                }
-              } else if (line.trim()) {
-                accumulatedContent += line;
+
+        const chunk = decoder.decode(value, { stream: true });
+
+        if (!sidExtracted && chunk.includes("SESSION_ID:")) {
+          for (const line of chunk.split("\n")) {
+            if (line.startsWith("SESSION_ID:")) {
+              const sid = parseInt(line.substring(11));
+              if (!isNaN(sid) && !currentSessionId) {
+                setCurrentSessionId(sid);
+                fetchSessions();
+                sidExtracted = true;
               }
+            } else if (line.trim()) {
+              accumulated += line;
             }
-          } else if (chunk.trim()) {
-            accumulatedContent += chunk;
           }
-          
-          // 메시지 업데이트
-          setMessages(prev => {
-            const updated = [...prev];
-            updated[updated.length - 1].content = accumulatedContent;
-            return updated;
-          });
-        } catch (decodeError) {
-          console.error("Decode error:", decodeError);
+        } else {
+          accumulated += chunk;
         }
+
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            ...updated[updated.length - 1],
+            content: accumulated,
+          };
+          return updated;
+        });
       }
-    } catch (error) {
-      console.error("Error fetching chat:", error);
+    } catch {
       setIsLoading(false);
-      setMessages(prev => [...prev, { role: "assistant", content: "죄송하오. 일시적인 오류가 발생했구려. 잠시 후 다시 시도해주시오." }]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "죄송하오. 일시적인 오류가 발생했구려. 잠시 후 다시 시도해주시오.",
+        },
+      ]);
     }
   };
 
+  const handleActionChip = (prompt: string) => {
+    setInput(prompt);
+    textareaRef.current?.focus();
+  };
+
+  if (!mounted) return <div className="h-screen bg-[#131314]" />;
+
   return (
-    <div className="flex h-screen bg-[#131314] text-[#e3e3e3] overflow-hidden font-sans" suppressHydrationWarning>
-      {/* Sidebar */}
-      <motion.aside 
+    <div
+      className="flex h-screen bg-[#131314] text-[#e3e3e3] overflow-hidden font-sans"
+      suppressHydrationWarning
+    >
+      {/* ── 사이드바 ───────────────────────────────────────────────── */}
+      <motion.aside
         initial={false}
         animate={{ width: isSidebarOpen ? 280 : 0 }}
-        className="bg-[#1e1f20] h-full overflow-hidden flex-shrink-0 relative border-r border-[#333]"
+        transition={{ duration: 0.2, ease: "easeInOut" }}
+        className="bg-[#1e1f20] h-full overflow-hidden flex-shrink-0 border-r border-[#2a2b2e]"
       >
-        <div className="w-[280px] p-4 flex flex-col h-full">
-          <button 
-            className="flex items-center gap-3 bg-[#333537] hover:bg-[#3d3f42] py-2.5 px-4 rounded-full text-sm font-medium mb-8 transition-colors"
-            onClick={handleNewChat}
-          >
-            <Plus size={18} />
-            {isSidebarOpen && <span>새 채팅</span>}
-          </button>
+        <div className="w-[280px] flex flex-col h-full">
+          {/* 상단 헤더 */}
+          <div className="flex items-center justify-between px-4 py-4 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsSidebarOpen(false)}
+                className="p-1.5 hover:bg-[#333537] rounded-full transition-colors"
+                title="사이드바 닫기"
+              >
+                <Menu size={18} />
+              </button>
+              <span className="text-sm font-semibold text-[#e3e3e3]">전우치 명상소</span>
+            </div>
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="p-1.5 hover:bg-[#333537] rounded-full transition-colors"
+              title="검색"
+            >
+              <Search size={16} className="text-[#9aa0a6]" />
+            </button>
+          </div>
 
-          <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar">
-            <p className="text-xs font-semibold text-[#9aa0a6] uppercase tracking-wider px-2 mb-2">최근 항목</p>
+          {/* 새 채팅 버튼 */}
+          <div className="px-3 pb-3 flex-shrink-0">
+            <button
+              onClick={handleNewChat}
+              className="flex items-center gap-2.5 w-full px-4 py-2 rounded-full border border-[#444] hover:bg-[#333537] text-sm font-medium transition-colors"
+            >
+              <Plus size={16} />
+              <span>새 채팅</span>
+            </button>
+          </div>
+
+          {/* 세션 목록 */}
+          <div className="flex-1 overflow-y-auto px-2 pb-2">
+            {sessions.length > 0 && (
+              <p className="text-[11px] font-semibold text-[#9aa0a6] uppercase tracking-wider px-2 py-2">
+                최근 항목
+              </p>
+            )}
             {sessions.length === 0 ? (
-                <p className="text-sm text-[#9aa0a6] px-2 italic">대화 내역이 없습니다.</p>
+              <p className="text-sm text-[#9aa0a6] px-3 py-2 italic">
+                대화 내역이 없습니다.
+              </p>
             ) : (
-                sessions.map((session) => (
-                  <div 
-                    key={session.id}
-                    onClick={() => loadSession(session.id)}
-                    className={`flex items-center gap-3 py-2 px-3 rounded-lg cursor-pointer transition-colors text-sm ${currentSessionId === session.id ? 'bg-[#333537] text-white' : 'text-[#c4c7c5] hover:bg-[#202122]'}`}
-                  >
-                    <MessageSquare size={16} className="flex-shrink-0" />
-                    <span className="truncate flex-1">{session.title}</span>
-                  </div>
-                ))
+              sessions.map((s) => (
+                <div key={s.id} className="relative group">
+                  {renamingId === s.id ? (
+                    /* 이름 변경 입력 */
+                    <div className="flex items-center gap-1 px-2 py-1">
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleRenameSubmit(s.id);
+                          if (e.key === "Escape") setRenamingId(null);
+                        }}
+                        className="flex-1 bg-[#2b2c2f] text-sm rounded px-2 py-1 outline-none border border-[#4285f4]"
+                      />
+                      <button
+                        onClick={() => handleRenameSubmit(s.id)}
+                        className="p-1 hover:text-[#4285f4] transition-colors"
+                      >
+                        <Check size={14} />
+                      </button>
+                      <button
+                        onClick={() => setRenamingId(null)}
+                        className="p-1 hover:text-[#d96570] transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    /* 일반 세션 행 */
+                    <div
+                      onClick={() => loadSession(s.id)}
+                      className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-colors text-sm ${
+                        currentSessionId === s.id
+                          ? "bg-[#333537] text-white"
+                          : "text-[#c4c7c5] hover:bg-[#28292a]"
+                      }`}
+                    >
+                      <MessageSquare size={15} className="flex-shrink-0 text-[#9aa0a6]" />
+                      <span className="truncate flex-1">{s.title}</span>
+                      {/* 옵션 버튼 — hover 시 표시 */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuOpenId(menuOpenId === s.id ? null : s.id);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#444] transition-all flex-shrink-0"
+                      >
+                        <MoreHorizontal size={14} />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 컨텍스트 메뉴 */}
+                  <AnimatePresence>
+                    {menuOpenId === s.id && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.12 }}
+                        className="absolute right-2 top-8 z-50 bg-[#2b2c2f] border border-[#444] rounded-lg shadow-xl py-1 w-36"
+                      >
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRenameStart(s);
+                          }}
+                          className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-[#333537] transition-colors"
+                        >
+                          <Pencil size={13} />
+                          이름 변경
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(s.id);
+                          }}
+                          className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[#d96570] hover:bg-[#333537] transition-colors"
+                        >
+                          <Trash2 size={13} />
+                          삭제
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              ))
             )}
           </div>
 
-          <div className="mt-auto space-y-1">
-            <NavItem icon={<History size={20} />} label="활동" />
-            <NavItem icon={<Settings size={20} />} label="설정" />
-            <NavItem icon={<HelpCircle size={20} />} label="도움말" />
+          {/* 하단 네비게이션 */}
+          <div className="border-t border-[#2a2b2e] px-2 py-2 flex-shrink-0 space-y-0.5">
+            <NavItem icon={<History size={18} />} label="활동" />
+            <NavItem icon={<Settings size={18} />} label="설정" />
+            <NavItem icon={<HelpCircle size={18} />} label="도움말" />
           </div>
         </div>
       </motion.aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col relative h-full">
-        {/* Header */}
-        <header className="p-4 flex items-center justify-between z-10">
-          <button 
+      {/* ── 메인 영역 ──────────────────────────────────────────────── */}
+      <main className="flex-1 flex flex-col relative h-full min-w-0">
+        {/* 헤더 */}
+        <header className="px-4 py-3 flex items-center justify-between flex-shrink-0">
+          <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="p-2 hover:bg-[#1e1f20] rounded-full transition-colors"
+            title="사이드바 토글"
           >
             <Menu size={20} />
           </button>
           <div className="flex items-center gap-2">
-            <span className="text-xs md:text-sm font-medium px-3 py-1 bg-[#1e1f20] rounded-lg border border-[#333] text-[#9aa0a6]">Gemini 3 Pro (전우치 Ver)</span>
+            <span className="text-xs md:text-sm font-medium px-3 py-1 bg-[#1e1f20] rounded-lg border border-[#333] text-[#9aa0a6]">
+              전우치 Ver · Gemini 3 Pro
+            </span>
             <div className="w-8 h-8 rounded-full bg-[#3c4043] flex items-center justify-center text-[10px] font-bold text-white border border-[#444]">
-              USER
+              YOU
             </div>
           </div>
         </header>
 
-        {/* Chat Area */}
-        <div className="flex-1 overflow-y-auto px-4 md:px-0 scrollbar-hide">
-          <div className="max-w-[820px] mx-auto py-8">
+        {/* 채팅 영역 */}
+        <div
+          className="flex-1 overflow-y-auto px-4 md:px-0 scrollbar-hide"
+          onClick={() => setMenuOpenId(null)}
+        >
+          <div className="max-w-[820px] mx-auto py-6">
             {messages.length === 0 ? (
+              /* 웰컴 화면 */
               <div className="mt-[8vh] text-center space-y-6 px-4">
-                <motion.div 
+                <motion.div
                   initial={{ y: 20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ duration: 0.8, ease: "easeOut" }}
-                  className="relative w-56 h-56 mx-auto mb-4"
+                  className="relative w-48 h-48 mx-auto mb-4"
                 >
                   <div className="absolute inset-0 bg-blue-500/20 blur-[80px] rounded-full animate-pulse" />
-                  <Image 
-                    src="/images/jeon-woochi_b.png" 
-                    alt="Jeon Woo-chi" 
-                    fill 
+                  <Image
+                    src="/images/jeon-woochi_b.png"
+                    alt="전우치"
+                    fill
                     className="object-contain drop-shadow-[0_0_20px_rgba(66,133,244,0.4)]"
                     priority
                   />
                 </motion.div>
-                
+
                 <h1 className="text-4xl md:text-5xl font-medium tracking-tight bg-gradient-to-r from-[#4285f4] via-[#9b72cb] to-[#d96570] bg-clip-text text-transparent pb-1">
                   ✨ 무엇을 도와드릴까요?
                 </h1>
-                <p className="text-2xl md:text-3xl font-medium text-[#444746]">
+                <p className="text-xl md:text-2xl font-medium text-[#444746]">
                   전우치가 도력으로 답해드리겠소.
                 </p>
-                
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-12 max-w-[800px] mx-auto">
-                    <ActionButton icon="🧘" label="명상 시작" desc="가이드 명상을 시작합니다." />
-                    <ActionButton icon="📝" label="고민 상담" desc="지친 마음에 위로를 건넵니다." />
-                    <ActionButton icon="📖" label="지혜 찾기" desc="고전의 가르침을 전해드립니다." />
-                    <ActionButton icon="✨" label="무드 명상" desc="기분에 맞춰 추천합니다." />
+
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-10 max-w-[800px] mx-auto">
+                  <ActionChip
+                    icon="🧘"
+                    label="명상 시작"
+                    desc="가이드 명상을 시작합니다."
+                    onClick={() => handleActionChip("명상을 시작하고 싶습니다. 가이드해 주세요.")}
+                  />
+                  <ActionChip
+                    icon="📝"
+                    label="고민 상담"
+                    desc="지친 마음에 위로를 건넵니다."
+                    onClick={() => handleActionChip("요즘 마음이 지쳐 있습니다. 위로의 말씀을 해주세요.")}
+                  />
+                  <ActionChip
+                    icon="📖"
+                    label="지혜 찾기"
+                    desc="고전의 가르침을 전해드립니다."
+                    onClick={() => handleActionChip("삶의 지혜가 담긴 고전의 가르침을 알려주세요.")}
+                  />
+                  <ActionChip
+                    icon="✨"
+                    label="무드 명상"
+                    desc="기분에 맞춰 추천합니다."
+                    onClick={() => handleActionChip("지금 제 기분에 맞는 명상을 추천해 주세요.")}
+                  />
                 </div>
               </div>
             ) : (
-              <div className="space-y-8 pb-32">
-                <AnimatePresence>
-                {messages.map((msg, i) => (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    key={i} 
-                    className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : ''}`}
-                  >
-                    {msg.role === 'assistant' && (
-                      <div className="w-10 h-10 rounded-full bg-[#1e1f20] flex items-center justify-center flex-shrink-0 border border-[#333] overflow-hidden">
-                        <Image 
-                          src="/images/jeon-woochi_b.png" 
-                          alt="Woochi" 
-                          width={40} 
-                          height={40} 
-                          className="object-cover scale-150 relative top-1"
-                        />
-                      </div>
-                    )}
-                    <div className={`max-w-[85%] ${msg.role === 'user' ? 'bg-[#2b2c2f] rounded-2xl p-4 shadow-sm' : 'pt-1'}`}>
-                      <div className={`text-[1.05rem] leading-relaxed ${msg.role === 'assistant' ? 'text-[#e3e3e3]' : 'text-white'}`}>
-                        {msg.role === 'assistant' ? (
-                          <ReactMarkdown 
+              /* 메시지 목록 */
+              <div className="space-y-6 pb-32">
+                <AnimatePresence initial={false}>
+                  {messages.map((msg, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}
+                    >
+                      {msg.role === "assistant" && (
+                        <div className="w-9 h-9 rounded-full bg-[#1e1f20] flex items-center justify-center flex-shrink-0 border border-[#333] overflow-hidden">
+                          <Image
+                            src="/images/jeon-woochi_b.png"
+                            alt="전우치"
+                            width={36}
+                            height={36}
+                            className="object-cover scale-150 relative top-1"
+                          />
+                        </div>
+                      )}
+
+                      <div
+                        className={`max-w-[85%] text-[1rem] leading-relaxed ${
+                          msg.role === "user"
+                            ? "bg-[#2b2c2f] rounded-2xl px-4 py-3 text-white shadow-sm"
+                            : "pt-1 text-[#e3e3e3]"
+                        }`}
+                      >
+                        {msg.role === "assistant" ? (
+                          <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
-                            components={{
-                              h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-6 mb-4 text-white border-b border-[#333] pb-2" {...props} />,
-                              h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-5 mb-3 text-[#d1d1d1]" {...props} />,
-                              h3: ({node, ...props}) => <h3 className="text-lg font-bold mt-4 mb-2 text-[#c4c7c5]" {...props} />,
-                              ul: ({node, ...props}) => <ul className="list-disc ml-6 mb-4 space-y-2" {...props} />,
-                              ol: ({node, ...props}) => <ol className="list-decimal ml-6 mb-4 space-y-2" {...props} />,
-                              li: ({node, ...props}) => <li className="pl-1" {...props} />,
-                              strong: ({node, ...props}) => <strong className="font-bold text-[#8ab4f8] bg-[#8ab4f8]/10 px-1 rounded" {...props} />,
-                            h1: ({node, ...props}) => (
-                              <h1 className="text-2xl font-bold mt-6 mb-4 text-white border-b border-[#333] pb-2" {...props} />
-                            ),
-                            h2: ({node, ...props}) => (
-                              <h2 className="text-xl font-bold mt-5 mb-3 text-[#e3e3e3]" {...props} />
-                            ),
-                            h3: ({node, ...props}) => (
-                              <h3 className="text-lg font-semibold mt-4 mb-2 text-[#b3b3b3]" {...props} />
-                            ),
-                            h4: ({node, ...props}) => (
-                              <h4 className="text-base font-semibold mt-3 mb-2 text-[#9aa0a6]" {...props} />
-                            ),
-                            ul: ({node, ...props}) => (
-                              <ul className="list-disc list-inside space-y-1 ml-2 my-3 text-[#d0d0d0]" {...props} />
-                            ),
-                            ol: ({node, ...props}) => (
-                              <ol className="list-decimal list-inside space-y-1 ml-2 my-3 text-[#d0d0d0]" {...props} />
-                            ),
-                            li: ({node, ...props}) => (
-                              <li className="ml-2 my-1" {...props} />
-                            ),
-                            strong: ({node, ...props}) => (
-                              <strong className="font-bold text-[#4285f4]" {...props} />
-                            ),
-                            em: ({node, ...props}) => (
-                              <em className="italic text-[#b3b3b3]" {...props} />
-                            ),
-                            hr: ({node, ...props}) => (
-                              <hr className="border-t border-[#333] my-4" {...props} />
-                            ),
-                            blockquote: ({node, ...props}) => (
-                              <blockquote className="border-l-4 border-[#4285f4] pl-4 py-2 my-4 bg-[#1e1f20] rounded-r-lg italic text-[#9aa0a6]" {...props} />
-                            ),
-                            p: ({node, ...props}) => <p className="mb-3 leading-relaxed text-[#e3e3e3] last:mb-0" {...props} />,
-                            code: ({node, ...props}) => (
-                              <code className="bg-[#2b2c2f] px-1.5 py-0.5 rounded text-sm font-mono text-[#d96570]" {...props} />
-                            ),
-                            pre: ({node, ...props}) => (
-                              <pre className="bg-[#1e1f20] p-4 rounded-lg overflow-x-auto my-3 border border-[#333]" {...props} />
-                            ),
-                            table: ({node, ...props}) => (
-                              <table className="border-collapse w-full my-3 border border-[#333]" {...props} />
-                            ),
-                            thead: ({node, ...props}) => (
-                              <thead className="bg-[#2b2c2f]" {...props} />
-                            ),
-                            th: ({node, ...props}) => (
-                              <th className="border border-[#333] px-3 py-2 text-left font-semibold text-[#4285f4]" {...props} />
-                            ),
-                            td: ({node, ...props}) => (
-                              <td className="border border-[#333] px-3 py-2" {...props} />
-                            ),
-                            a: ({node, ...props}) => (
-                              <a className="text-[#4285f4] hover:underline" {...props} />
-                            ),
-                            }}
+                            components={mdComponents}
                           >
                             {msg.content}
                           </ReactMarkdown>
@@ -360,35 +577,39 @@ export default function Home() {
                           <div className="whitespace-pre-wrap">{msg.content}</div>
                         )}
                       </div>
-                    </div>
-                    {msg.role === 'user' && (
-                       <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#3c4043] to-[#1e1f20] flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-white shadow-lg border border-[#333]">
-                        USER
-                      </div>
-                    )}
-                  </motion.div>
-                ))}
-                </AnimatePresence>
-                {isLoading && (
-                  <div className="flex gap-4">
-                    <div className="w-10 h-10 rounded-full bg-[#1e1f20] flex items-center justify-center flex-shrink-0 border border-[#333] overflow-hidden">
-                        <Image 
-                          src="/images/jeon-woochi_b.png" 
-                          alt="Woochi Thinking" 
-                          width={40} 
-                          height={40} 
-                          className="object-cover scale-150 relative top-1 animate-bounce"
-                        />
-                    </div>
-                    <div className="w-full">
-                        <div className="h-1.5 w-full bg-[#1e1f20] rounded-full overflow-hidden mt-6">
-                            <motion.div 
-                                animate={{ x: ["-100%", "300%"] }}
-                                transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-                                className="w-1/3 h-full bg-gradient-to-r from-transparent via-[#8ab4f8] to-transparent"
-                            />
+
+                      {msg.role === "user" && (
+                        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#3c4043] to-[#1e1f20] flex items-center justify-center flex-shrink-0 text-[9px] font-bold text-white border border-[#444]">
+                          YOU
                         </div>
-                        <p className="text-xs text-[#9aa0a6] mt-2 animate-pulse">도력을 모으는 중...</p>
+                      )}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+
+                {/* 로딩 인디케이터 */}
+                {isLoading && (
+                  <div className="flex gap-3">
+                    <div className="w-9 h-9 rounded-full bg-[#1e1f20] flex items-center justify-center flex-shrink-0 border border-[#333] overflow-hidden">
+                      <Image
+                        src="/images/jeon-woochi_b.png"
+                        alt="응답 중"
+                        width={36}
+                        height={36}
+                        className="object-cover scale-150 relative top-1 animate-bounce"
+                      />
+                    </div>
+                    <div className="flex-1 pt-3">
+                      <div className="h-1 w-full bg-[#2b2c2f] rounded-full overflow-hidden">
+                        <motion.div
+                          animate={{ x: ["-100%", "300%"] }}
+                          transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                          className="w-1/3 h-full bg-gradient-to-r from-transparent via-[#8ab4f8] to-transparent"
+                        />
+                      </div>
+                      <p className="text-xs text-[#9aa0a6] mt-2 animate-pulse">
+                        도력을 모으는 중...
+                      </p>
                     </div>
                   </div>
                 )}
@@ -398,46 +619,59 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Input Area */}
-        <div className="p-4 pb-8 flex justify-center bg-gradient-to-t from-[#131314] via-[#131314] to-transparent pt-10">
-          <div className="max-w-[820px] w-full relative group px-2 md:px-0">
-            <div className="bg-[#1e1f20] group-focus-within:bg-[#202124] rounded-[32px] border border-transparent focus-within:ring-1 focus-within:ring-[#4285f4]/30 transition-all shadow-xl overflow-hidden flex flex-col">
-              <div className="flex items-center px-6 py-2">
-                <textarea 
+        {/* 입력 영역 */}
+        <div className="px-4 pb-6 flex justify-center bg-gradient-to-t from-[#131314] via-[#131314] to-transparent pt-8 flex-shrink-0">
+          <div className="max-w-[820px] w-full px-2 md:px-0">
+            <div className="bg-[#1e1f20] rounded-[28px] border border-transparent focus-within:border-[#4285f4]/40 transition-all shadow-xl flex flex-col">
+              <div className="flex items-end px-5 pt-3 pb-1">
+                <textarea
+                  ref={textareaRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
+                    if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       handleSend();
                     }
                   }}
                   placeholder="전우치에게 궁금한 것을 물어보세요..."
-                  className="flex-1 bg-transparent py-4 outline-none resize-none text-[1.1rem] min-h-[56px] max-h-[200px]"
-                  style={{ height: 'auto' }}
+                  className="flex-1 bg-transparent outline-none resize-none text-[1rem] min-h-[48px] max-h-[200px] py-2 leading-relaxed"
                   rows={1}
                 />
               </div>
-              <div className="flex items-center justify-between px-6 pb-4">
-                <div className="flex gap-1 md:gap-2">
-                    <IconButton icon={<Plus size={20} />} />
-                    <IconButton icon={<MessageSquare size={20} />} />
-                    <IconButton icon={<Search size={20} />} />
+              <div className="flex items-center justify-between px-5 pb-3">
+                <div className="flex gap-1">
+                  <IconBtn title="첨부">
+                    <Plus size={18} />
+                  </IconBtn>
+                  <IconBtn title="채팅">
+                    <MessageSquare size={18} />
+                  </IconBtn>
+                  <IconBtn title="검색">
+                    <Search size={18} />
+                  </IconBtn>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-[#5f6368] hidden md:block">{input.length} 자</span>
-                  <button 
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-[#5f6368] hidden md:block">
+                    {input.length}자
+                  </span>
+                  <button
                     onClick={handleSend}
                     disabled={!input.trim() || isLoading}
-                    className={`p-2.5 rounded-full transition-all ${input.trim() ? 'bg-white text-black' : 'text-[#5f6368] bg-[#131314]'}`}
+                    className={`p-2 rounded-full transition-all ${
+                      input.trim() && !isLoading
+                        ? "bg-white text-black hover:bg-[#e8eaed]"
+                        : "bg-[#2b2c2f] text-[#5f6368] cursor-not-allowed"
+                    }`}
+                    title="전송 (Enter)"
                   >
-                    <Send size={20} strokeWidth={2.5} />
+                    <Send size={18} strokeWidth={2.5} />
                   </button>
                 </div>
               </div>
             </div>
-            <p className="text-[11px] text-[#9aa0a6] text-center mt-3">
-              전우치 에이전트는 환각이나 실수를 할 수 있습니다. 중요한 정보는 도력으로 직접 확인하십시오.
+            <p className="text-[11px] text-[#5f6368] text-center mt-2">
+              전우치 에이전트는 실수할 수 있습니다. 중요한 정보는 직접 확인하세요.
             </p>
           </div>
         </div>
@@ -446,30 +680,59 @@ export default function Home() {
   );
 }
 
-function NavItem({ icon, label }: { icon: React.ReactNode, label: string }) {
+// ─── 하위 컴포넌트 ──────────────────────────────────────────────────────────
+function NavItem({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <div className="flex items-center gap-3 py-2.5 px-3 hover:bg-[#333537] rounded-lg cursor-pointer transition-colors text-sm font-medium text-[#c4c7c5]">
+    <button className="flex items-center gap-3 w-full py-2 px-3 hover:bg-[#28292a] rounded-lg transition-colors text-sm font-medium text-[#c4c7c5]">
       {icon}
       <span>{label}</span>
-    </div>
-  );
-}
-
-function IconButton({ icon }: { icon: React.ReactNode }) {
-  return (
-    <button className="p-2.5 hover:bg-[#333] rounded-full text-[#9aa0a6] transition-colors">
-      {icon}
     </button>
   );
 }
 
-function ActionButton({ icon, label, desc }: { icon: string, label: string, desc: string }) {
+function IconBtn({
+  icon,
+  title,
+  children,
+}: {
+  icon?: React.ReactNode;
+  title?: string;
+  children?: React.ReactNode;
+}) {
   return (
-    <button className="flex flex-col items-start gap-2 p-4 bg-[#1e1f20] hover:bg-[#28292a] rounded-2xl border border-[#333] transition-all text-left group">
-      <span className="text-xl bg-[#131314] w-10 h-10 flex items-center justify-center rounded-xl group-hover:scale-110 transition-transform">{icon}</span>
-      <div className="mt-1">
-        <p className="font-semibold text-sm group-hover:text-white transition-colors">{label}</p>
-        <p className="text-[11px] text-[#9aa0a6] leading-tight mt-1">{desc}</p>
+    <button
+      title={title}
+      className="p-2 hover:bg-[#333] rounded-full text-[#9aa0a6] transition-colors"
+    >
+      {icon ?? children}
+    </button>
+  );
+}
+
+function ActionChip({
+  icon,
+  label,
+  desc,
+  onClick,
+}: {
+  icon: string;
+  label: string;
+  desc: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-start gap-2 p-4 bg-[#1e1f20] hover:bg-[#28292a] rounded-2xl border border-[#333] hover:border-[#444] transition-all text-left group"
+    >
+      <span className="text-xl bg-[#131314] w-9 h-9 flex items-center justify-center rounded-xl group-hover:scale-110 transition-transform">
+        {icon}
+      </span>
+      <div>
+        <p className="font-semibold text-sm group-hover:text-white transition-colors">
+          {label}
+        </p>
+        <p className="text-[11px] text-[#9aa0a6] leading-tight mt-0.5">{desc}</p>
       </div>
     </button>
   );
