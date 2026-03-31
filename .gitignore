@@ -19,10 +19,18 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
-data/
+
+# 루트의 data 폴더만 제외 (backend/data/chroma_db는 배포에 포함)
+/data/
 
 # IDE
 .vscode/
+
+# SQLite DB 파일
+*.db
+
+# 일회성 스크립트
+backend/search_db.py
 
 # file 형식
 *.png
