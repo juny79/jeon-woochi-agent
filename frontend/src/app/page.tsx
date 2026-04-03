@@ -41,65 +41,78 @@ interface Session {
 // ─── ReactMarkdown 공통 컴포넌트 (중복 제거) ───────────────────────────────
 const mdComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
   h1: ({ ...props }) => (
-    <h1 className="text-2xl font-bold mt-6 mb-4 text-white border-b border-[#333] pb-2" {...props} />
+    <h1
+      className="text-[0.92rem] font-bold mt-5 mb-2 text-white border-b border-[#2d2e31] pb-1.5"
+      {...props}
+    />
   ),
   h2: ({ ...props }) => (
-    <h2 className="text-xl font-bold mt-5 mb-3 text-[#e3e3e3]" {...props} />
+    <h2
+      className="text-[0.88rem] font-bold mt-6 mb-1.5 text-white"
+      {...props}
+    />
   ),
   h3: ({ ...props }) => (
-    <h3 className="text-lg font-semibold mt-4 mb-2 text-[#b3b3b3]" {...props} />
+    <h3
+      className="text-[0.84rem] font-semibold mt-3 mb-1.5 text-[#e3e3e3]"
+      {...props}
+    />
   ),
   h4: ({ ...props }) => (
-    <h4 className="text-base font-semibold mt-3 mb-2 text-[#9aa0a6]" {...props} />
+    <h4 className="text-[0.82rem] font-semibold mt-2 mb-1 text-[#d0d0d0]" {...props} />
   ),
   p: ({ ...props }) => (
-    <p className="mb-3 leading-relaxed text-[#e3e3e3] last:mb-0" {...props} />
+    <p className="mb-2.5 leading-[1.75] text-[#d0d0d0] text-[0.82rem] last:mb-0" {...props} />
   ),
   ul: ({ ...props }) => (
-    <ul className="list-disc list-inside space-y-1 ml-2 my-3 text-[#d0d0d0]" {...props} />
+    <ul className="list-disc pl-5 space-y-1 my-2 text-[0.82rem] text-[#d0d0d0] marker:text-[#777]" {...props} />
   ),
   ol: ({ ...props }) => (
-    <ol className="list-decimal list-inside space-y-1 ml-2 my-3 text-[#d0d0d0]" {...props} />
+    <ol className="list-decimal pl-5 space-y-1 my-2 text-[0.82rem] text-[#d0d0d0]" {...props} />
   ),
-  li: ({ ...props }) => <li className="ml-2 my-1" {...props} />,
+  li: ({ ...props }) => (
+    <li className="leading-[1.7] pl-0.5" {...props} />
+  ),
   strong: ({ ...props }) => (
-    <strong className="font-bold text-[#4285f4]" {...props} />
+    <strong className="font-bold text-white" {...props} />
   ),
-  em: ({ ...props }) => <em className="italic text-[#b3b3b3]" {...props} />,
-  hr: ({ ...props }) => <hr className="border-t border-[#333] my-4" {...props} />,
+  em: ({ ...props }) => <em className="italic text-[#b0b0b0]" {...props} />,
+  hr: () => <div className="my-2" />,
   blockquote: ({ ...props }) => (
     <blockquote
-      className="border-l-4 border-[#4285f4] pl-4 py-2 my-4 bg-[#1e1f20] rounded-r-lg italic text-[#9aa0a6]"
+      className="border-l-2 border-[#555] pl-3 pr-2 py-1.5 my-3 text-[0.8rem] text-[#aaa] italic"
       {...props}
     />
   ),
   code: ({ ...props }) => (
     <code
-      className="bg-[#2b2c2f] px-1.5 py-0.5 rounded text-sm font-mono text-[#d96570]"
+      className="bg-[#252628] px-1 py-0.5 rounded text-[0.77rem] font-mono text-[#d0d0d0]"
       {...props}
     />
   ),
   pre: ({ ...props }) => (
     <pre
-      className="bg-[#1e1f20] p-4 rounded-lg overflow-x-auto my-3 border border-[#333]"
+      className="bg-[#1c1d1f] p-3 rounded-xl overflow-x-auto my-2.5 border border-[#2d2e31] text-[0.77rem]"
       {...props}
     />
   ),
   table: ({ ...props }) => (
-    <table className="border-collapse w-full my-3 border border-[#333]" {...props} />
+    <div className="overflow-x-auto my-3 rounded-lg border border-[#2d2e31]">
+      <table className="border-collapse w-full text-[0.78rem]" {...props} />
+    </div>
   ),
-  thead: ({ ...props }) => <thead className="bg-[#2b2c2f]" {...props} />,
+  thead: ({ ...props }) => <thead className="bg-[#212224] border-b border-[#2d2e31]" {...props} />,
   th: ({ ...props }) => (
     <th
-      className="border border-[#333] px-3 py-2 text-left font-semibold text-[#4285f4]"
+      className="px-3 py-2 text-left font-semibold text-white text-[0.78rem]"
       {...props}
     />
   ),
   td: ({ ...props }) => (
-    <td className="border border-[#333] px-3 py-2" {...props} />
+    <td className="border-t border-[#252628] px-3 py-2 text-[#d0d0d0]" {...props} />
   ),
   a: ({ ...props }) => (
-    <a className="text-[#4285f4] hover:underline" target="_blank" rel="noopener noreferrer" {...props} />
+    <a className="underline text-[#d0d0d0] hover:text-white transition-colors" target="_blank" rel="noopener noreferrer" {...props} />
   ),
 };
 
@@ -252,17 +265,18 @@ export default function Home() {
         const chunk = decoder.decode(value, { stream: true });
 
         if (!sidExtracted && chunk.includes("SESSION_ID:")) {
-          for (const line of chunk.split("\n")) {
-            if (line.startsWith("SESSION_ID:")) {
-              const sid = parseInt(line.substring(11));
-              if (!isNaN(sid) && !currentSessionId) {
-                setCurrentSessionId(sid);
-                fetchSessions();
-                sidExtracted = true;
-              }
-            } else if (line.trim()) {
-              accumulated += line;
+          const sidMatch = chunk.match(/SESSION_ID:(\d+)\n?/);
+          if (sidMatch) {
+            const sid = parseInt(sidMatch[1]);
+            if (!isNaN(sid) && !currentSessionId) {
+              setCurrentSessionId(sid);
+              fetchSessions();
+              sidExtracted = true;
             }
+            // SESSION_ID 줄만 제거하고 나머지 내용은 줄바꿈 그대로 유지
+            accumulated += chunk.replace(/SESSION_ID:\d+\n?/, "");
+          } else {
+            accumulated += chunk;
           }
         } else {
           accumulated += chunk;
@@ -465,7 +479,7 @@ export default function Home() {
           </button>
           <div className="flex items-center gap-2">
             <span className="text-xs md:text-sm font-medium px-3 py-1 bg-[#1e1f20] rounded-lg border border-[#333] text-[#9aa0a6]">
-              전우치 Ver · Gemini 3 Pro
+              전우치 v1.0
             </span>
             <div className="w-8 h-8 rounded-full bg-[#3c4043] flex items-center justify-center text-[10px] font-bold text-white border border-[#444]">
               YOU
@@ -534,49 +548,51 @@ export default function Home() {
               </div>
             ) : (
               /* 메시지 목록 */
-              <div className="space-y-6 pb-32">
+              <div className="space-y-3 pb-32">
                 <AnimatePresence initial={false}>
                   {messages.map((msg, i) => (
                     <motion.div
                       key={i}
-                      initial={{ opacity: 0, y: 8 }}
+                      initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}
+                      transition={{ duration: 0.18 }}
+                      className={`flex gap-2.5 ${msg.role === "user" ? "justify-end" : "items-start"}`}
                     >
                       {msg.role === "assistant" && (
-                        <div className="w-9 h-9 rounded-full bg-[#1e1f20] flex items-center justify-center flex-shrink-0 border border-[#333] overflow-hidden">
+                        <div className="w-7 h-7 rounded-full bg-[#1e1f20] flex items-center justify-center flex-shrink-0 border border-[#333] overflow-hidden mt-0.5">
                           <Image
                             src="/images/jeon-woochi_b.png"
                             alt="전우치"
-                            width={36}
-                            height={36}
-                            className="object-cover scale-150 relative top-1"
+                            width={28}
+                            height={28}
+                            className="object-cover scale-150 relative top-0.5"
                           />
                         </div>
                       )}
 
                       <div
-                        className={`max-w-[85%] text-[1rem] leading-relaxed ${
+                        className={`max-w-[82%] ${
                           msg.role === "user"
-                            ? "bg-[#2b2c2f] rounded-2xl px-4 py-3 text-white shadow-sm"
-                            : "pt-1 text-[#e3e3e3]"
+                            ? "bg-[#2b2c2f] rounded-2xl px-3.5 py-2.5 text-[0.82rem] text-white shadow-sm"
+                            : "bg-[#1a1b1c] border border-[#252628] rounded-2xl px-4 py-3 text-[#d8dbd9] shadow-sm"
                         }`}
                       >
                         {msg.role === "assistant" ? (
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            components={mdComponents}
-                          >
-                            {msg.content}
-                          </ReactMarkdown>
+                          <div className="md-body">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={mdComponents}
+                            >
+                              {msg.content}
+                            </ReactMarkdown>
+                          </div>
                         ) : (
-                          <div className="whitespace-pre-wrap">{msg.content}</div>
+                          <div className="whitespace-pre-wrap leading-[1.65]">{msg.content}</div>
                         )}
                       </div>
 
                       {msg.role === "user" && (
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#3c4043] to-[#1e1f20] flex items-center justify-center flex-shrink-0 text-[9px] font-bold text-white border border-[#444]">
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#3c4043] to-[#1e1f20] flex items-center justify-center flex-shrink-0 text-[8px] font-bold text-white border border-[#444] mt-0.5">
                           YOU
                         </div>
                       )}

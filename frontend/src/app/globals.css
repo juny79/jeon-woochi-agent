@@ -11,3 +11,16 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+/* 리스트 항목 안의 p 태그 여백 제거 */
+.md-body li p {
+  margin-bottom: 0;
+  margin-top: 0;
+}
+
+/* strong 단독 p 태그 → 섹션 제목처럼 처리 */
+.md-body p:has(> strong:only-child) {
+  margin-top: 1.25rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.85rem;
+}

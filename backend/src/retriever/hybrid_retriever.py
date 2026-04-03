@@ -24,7 +24,7 @@ class HybridRetriever:
         if _HAS_ENSEMBLE:
             self.ensemble_retriever = EnsembleRetriever(
                 retrievers=[bm25_retriever, vector_retriever],
-                weights=[0.5, 0.5],
+                weights=[0.7, 0.3],
             )
             self._use_ensemble = True
         else:

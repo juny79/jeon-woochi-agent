@@ -114,7 +114,7 @@ class VectorDBManager:
         # BM25를 위해 문서를 메모리에 저장
         self.stored_docs[collection_name] = docs
 
-    def get_vector_retriever(self, collection_name: str, k: int = 3):
+    def get_vector_retriever(self, collection_name: str, k: int = 2):
         """[중요] 검색기 반환 함수"""
         vectorstore = Chroma(
             client=self.client,
@@ -123,7 +123,7 @@ class VectorDBManager:
         )
         return vectorstore.as_retriever(search_kwargs={"k": k})
     
-    def get_bm25_retriever(self, collection_name: str = "default_collection", k: int = 3):
+    def get_bm25_retriever(self, collection_name: str = "default_collection", k: int = 2):
         """BM25 기반 검색기 반환 함수"""
         # 먼저 메모리에 있는 문서 확인
         if collection_name in self.stored_docs:

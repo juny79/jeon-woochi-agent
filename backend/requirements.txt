@@ -17,6 +17,7 @@ fastapi
 uvicorn
 python-multipart
 cors
+psycopg2-binary
 
 # --- Evaluation & Observability ---
 langsmith                # 정량 평가 및 트레이싱
